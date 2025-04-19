@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Requester Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 500px; width: 100%; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        select, button { padding: 5px; }
+        tr { cursor: pointer; }
+        tr:hover { background-color: #f5f5f5; }
+        .selected { background-color: #e0e0e0; }
+        .specific-button {
+            background: none;
+            border: none;
+            color: #007BFF;
+            text-decoration: underline;
+            cursor: pointer;
+            padding: 0;
+            font-size: 14px;
+        }
+        #details-popup {
+            display: none;
+            position: fixed;
+            top: 20%;
+            left: 50%;
+            transform: translate(-50%, -20%);
+            background: white;
+            padding: 20px;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+        }
+        .header {
+            padding: 35px;
+            color: white;
+            background-color: #012652;
+        }
+    </style>
+</head>
+<body>
+    <h1>GOM - Requester Dashboard</h1>
+
+    <div class="header">
+        <div class="logo-container"><img src="{{ url_for('static', filename='logo.jpg') }}" alt="logo" width="100px" height="50px"></div>
+    </div>
+
+    <div id="map"></div>
+    <table id="requestss-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Tên người yêu cầu</th>
+                <th>Địa chỉ</th>
+                <th>Nhà kho</th>
+                <th>Địa chỉ nhà kho</th>
+                <th>Quãng đường</th>
+                <th>Ước tính thời gian</th>
+                <th>Trạng thái</th>
+                <th>Thời gian</th>
+                <th>Chi tiết</th>
+                <th>Xóa đơn</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <div id="details-popup">
+        <div id="details-content"></div>
+        <button onclick="closePopup()">Close</button>
+    </div>
+
+    <script>
+        // Initialize Leaflet map
+        var map = L.map('map').setView([10.776, 106.700], 12); // Center on Ho Chi Minh City
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Store requests and layers
+        var requestss = [];
+        var currentLayers = [];
+
+        // Clear map layers
+        function clearMap() {
+            currentLayers.forEach(layer => map.removeLayer(layer));
+            currentLayers = [];
+        }
+
+        // Show route for a request
+        function showRoute(requestsId) {
+            clearMap();
+            var requests = requestss.find(r => r.rid === requestsId);
+            if (!requests) return;
+
+            // Highlight selected row
+            document.querySelectorAll('#requestss-table tr').forEach(row => {
+                row.classList.remove('selected');
+                if (row.dataset.rid == requestsId) {
+                    row.classList.add('selected');
+                }
+            });
+
+            // Add polyline
+            if (requests.polyline && requests.polyline.length > 0) {
+                var polyline = L.polyline(requests.polyline, {color: 'blue'}).addTo(map);
+                currentLayers.push(polyline);
+
+                // Add markers
+                var requestserMarker = L.marker([requests.requester_latitude, requests.requester_longitude])
+                    .bindPopup(`Requester: ${requests.requester_name}<br>Address: ${requests.requestser_address}`)
+                    .addTo(map);
+                var warehouseMarker = L.marker([requests.warehouse_latitude, requests.warehouse_longitude])
+                    .bindPopup(`Warehouse: ${requests.warehouse_name}<br>Address: ${requests.warehouse_address}`)
+                    .addTo(map);
+                currentLayers.push(requestserMarker, warehouseMarker);
+
+                // Fit map to route
+                var bounds = polyline.getBounds();
+                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+            }
+        }
+
+        function showHang(rid) {
+            const request = requestss.find(d => d.rid === rid);
+            if (!request) return;
+
+            const content = `
+                <p><strong>ID:</strong> ${request.rid}</p>
+                <p><strong>Họ tên:</strong> ${request.requester_name}</p>
+                <p><strong>Địa chỉ:</strong> ${request.requester_address}</p>
+                <p><strong>Số lượng lương thực:</strong> ${request.dry_food_qty}</p>
+                <p><strong>Số lượng đồ hộp:</strong> ${request.canned_food_qty} g</p>
+                <p><strong>Số lượng đồ sữa/thức uống:</strong> ${request.milk_cold_qty} (thùng/cái)</p>
+                <p><strong>Số lượng đồ tươi:</strong> ${request.fresh_food_qty}</p>
+                <p><strong>Số lượng gia vị:</strong> ${request.spice_qty}</p>
+                <p><strong>Warehouse Address:</strong> ${request.warehouse_address}</p>
+                <p><strong>Timestamp:</strong> ${request.timestamp}</p>
+            `;
+            document.getElementById('details-content').innerHTML = content;
+            document.getElementById('details-popup').style.display = 'block';
+        }
+
+        function closePopup() {
+            document.getElementById('details-popup').style.display = 'none';
+        }
+
+        // Delete requests
+        function deleterequests(rid) {
+            if (!confirm(`Are you sure you want to delete request ID ${rid}?`)) return;
+            fetch(`/delete_request/${rid}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                    fetchrequestss();
+                })
+                .catch(error => console.error('Error deleting request:', error));
+        }
+
+        // Fetch requests
+        function fetchrequestss() {
+            fetch('/requests')
+                .then(response => response.json())
+                .then(data => {
+                    requestss = data;
+                    var tbody = document.querySelector('#requestss-table tbody');
+                    tbody.innerHTML = '';
+
+                    data.forEach(requests => {
+                        var row = document.createElement('tr');
+                        row.dataset.rid = requests.rid;
+                        row.innerHTML = `
+                            <td>${requests.rid}</td>
+                            <td>${requests.requester_name}</td>
+                            <td>${requests.requester_address}</td>
+                            <td>${requests.warehouse_name}</td>
+                            <td>${requests.warehouse_address}</td>
+                            <td>${requests.distance}</td>
+                            <td>${requests.duration}</td>
+                            <td>
+                                <select onchange="updateStatus(${requests.rid}, this.value)">
+                                    <option value="Pending" ${requests.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="Processed" ${requests.status === 'Processed' ? 'selected' : ''}>Processed</option>
+                                    <option value="Picked Up" ${requests.status === 'Picked Up' ? 'selected' : ''}>Picked Up</option>
+                                </select>
+                            </td>
+                            <td>${requests.timestamp}</td>
+                            <td><button class="specific-button" onclick="showHang(${requests.rid})">Xem thêm</button></td>
+                            <td><button onclick="deleterequests(${requests.rid})">Delete</button></td>
+                        `;
+                        row.onclick = (e) => {
+                            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') {
+                                showRoute(requests.rid);
+                            }
+                        };
+                        tbody.appendChild(row);
+                    });
+
+                    if (data.length > 0) {
+                        showRoute(data[0].rid);
+                    }
+                })
+                .catch(error => console.error('Error fetching requests:', error));
+        }
+
+        // Update status
+        function updateStatus(rid, status) {
+            fetch(`/update_status/${rid}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: status })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                    fetchrequestss();
+                })
+                .catch(error => console.error('Error updating status:', error));
+        }
+
+        fetchrequestss();
+    </script>
+</body>
+</html>

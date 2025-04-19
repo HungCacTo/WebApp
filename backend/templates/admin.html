@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .header {
+            padding: 35px;
+            color: white;
+            background-color: #012652;
+        }
+        #map {
+            margin-top: 40px;
+            height: 500px;
+            width: 100%;
+        }
+        .table-wrapper {
+            max-height: 250px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        select {
+            padding: 5px;
+        }
+        tr {
+            cursor: pointer;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .selected {
+            background-color: #e0e0e0;
+        }
+        #loader {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: bold;
+            font-size: 18px;
+            display: none;
+        }
+        .specific-button {
+            background: none;
+            border: none;
+            color: #007BFF;
+            text-decoration: underline;
+            cursor: pointer;
+            padding: 0;
+            font-size: 14px;
+        }
+
+    </style>
+</head>
+<body>
+    <h1>GOM - Sender's Dashboard</h1>
+    <div class="header">
+        <div class="logo-container"><img src="{{ url_for('static', filename='logo.jpg') }}" alt="logo" width="100px" height="50px"></div>
+    </div>
+
+
+    <div id="map"></div>
+    <div class="table-wrapper">
+        <table id="donations-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>User's Name</th>
+                    <th>Category</th>
+                    <th>User Address</th>
+                    <th>Warehouse</th>
+                    <th>Warehouse Address</th>
+                    <th>Distance</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                    <th>Specific</th>
+                    <th>Remove</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div id="details-popup" style="display:none; position:fixed; top:20%; left:30%; width:40%; background:white; padding:20px; border:1px solid #ccc; box-shadow:0 0 10px rgba(0,0,0,0.5); z-index:1000;">
+            <h3> 
+                Request Details
+            </h3>
+            <div id="details-content"></div>
+            <button onclick="closePopup()">Close</button>
+    </div>
+    <div id="loader">Loading...</div>
+    <script>
+        var map = L.map('map').setView([10.6, -106.666], 12);
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        var donations = [];
+        var currentLayers = [];
+
+        function clearMap() {
+            currentLayers.forEach(layer => map.removeLayer(layer));
+            currentLayers = [];
+        }
+
+        function showRoute(donationId) {
+            clearMap();
+            var donation = donations.find(d => d.id === donationId);
+            if (!donation) return;
+
+            document.querySelectorAll('#donations-table tr').forEach(row => {
+                row.classList.remove('selected');
+                if (row.dataset.id == donationId) {
+                    row.classList.add('selected');
+                }
+            });
+
+            if (donation.polyline && donation.polyline.length > 0) {
+                var polyline = L.polyline(donation.polyline, { color: 'blue' }).addTo(map);
+                currentLayers.push(polyline);
+
+                var userMarker = L.marker([donation.user_latitude, donation.user_longitude])
+                    .bindPopup(`User: ${donation.username}<br>Address: ${donation.user_address}`)
+                    .addTo(map);
+                var warehouseMarker = L.marker([donation.warehouse_latitude, donation.warehouse_longitude])
+                    .bindPopup(`Warehouse: ${donation.warehouse_name}<br>Address: ${donation.warehouse_address}`)
+                    .addTo(map);
+                currentLayers.push(userMarker, warehouseMarker);
+
+                setTimeout(() => {
+                    var bounds = polyline.getBounds();
+                    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+                }, 0);
+            }
+        }
+
+        function showHang(id){
+            const donation = donations.find(d => d.id === id);
+            if (!donation) return;
+
+            const content = `
+            <p><strong>ID:</strong> ${donation.id}</p>
+            <p><strong>User:</strong> ${donation.username}</p>
+            <p><strong>User Address:</strong> ${donation.user_address}</p>
+            <p><strong>Category:</strong> ${donation.category}</p>
+            <p><strong>Date:</strong> ${donation.date}</p>
+            <p><strong>Weight:</strong> ${donation.weight} g</p>
+            <p><strong>Quantity:</strong> ${donation.quantity} (thùng/cái)</p>
+            <p><strong>Warehouse:</strong> ${donation.warehouse_name}</p>
+            <p><strong>Warehouse Address:</strong> ${donation.warehouse_address}</p>
+            <p><strong>Status:</strong> ${donation.status}</p>
+            <p><strong>Timestamp:</strong> ${donation.timestamp}</p>
+        `;
+        document.getElementById('details-content').innerHTML = content;
+        document.getElementById('details-popup').style.display = 'block';
+        }
+
+        function closePopup(){
+            document.getElementById('details-popup').style.display = 'none';
+        }
+
+        function deleteDonation(id) {
+            if (!confirm(`Are you sure you want to delete donation ID ${id}?`)) return;
+            fetch(`/delete_donation/${id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                    fetchDonations();
+                })
+                .catch(error => console.error('Error deleting donation:', error));
+        }
+
+        function updateStatus(id, status) {
+            fetch(`/update_status/${id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: status })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data.message);
+                    debouncedFetch();
+                })
+                .catch(error => console.error('Error updating status:', error));
+        }
+
+        let refreshTimeout;
+        function debouncedFetch() {
+            clearTimeout(refreshTimeout);
+            refreshTimeout = setTimeout(fetchDonations, 300);
+        }
+
+        function fetchDonations() {
+            document.getElementById('loader').style.display = 'block';
+            fetch('/donations')
+                .then(response => response.json())
+                .then(data => {
+                    donations = data;
+                    var tbody = document.querySelector('#donations-table tbody');
+                    const fragment = document.createDocumentFragment();
+                    data.forEach(donation => {
+                        var row = document.createElement('tr');
+                        row.dataset.id = donation.id;
+                        row.innerHTML = `
+                            <td>${donation.id}</td>
+                            <td>${donation.username}</td>
+                            <td>${donation.category}</td>
+                            <td>${donation.user_address}</td>
+                            <td>${donation.warehouse_name}</td>
+                            <td>${donation.warehouse_address}</td>
+                            <td>${donation.distance}</td>
+                            <td>${donation.duration}</td>
+                            <td>
+                                <select onchange="updateStatus(${donation.id}, this.value)">
+                                    <option value="Pending" ${donation.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="Processed" ${donation.status === 'Processed' ? 'selected' : ''}>Processed</option>
+                                    <option value="Picked Up" ${donation.status === 'Picked Up' ? 'selected' : ''}>Picked Up</option>
+                                </select>
+                            </td>
+                            <td<button class="specific-button" onclick="showHang(${donation.id})">Show more</button></td>
+                            <td><button onclick="deleteDonation(${donation.id})">Delete</button></td>
+                        `;
+                        row.onclick = (e) => {
+                            if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'SELECT') {
+                                showRoute(donation.id);
+                            }
+                        };
+                        fragment.appendChild(row);
+                    });
+                    tbody.innerHTML = '';
+                    tbody.appendChild(fragment);
+                    document.getElementById('loader').style.display = 'none';
+                    if (data.length > 0) {
+                        showRoute(data[0].id);
+                    }
+                })
+                .catch(error => console.error('Error fetching donations:', error));
+        }
+
+        fetchDonations();
+    </script>
+</body>
+</html>

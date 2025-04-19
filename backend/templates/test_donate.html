@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Donation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url("{{ url_for('static', filename='TreEm.jpg') }}");
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-attachment: fixed;
+            filter: blur(8px);
+            z-index: -1;
+        }
+        .form-container {
+            max-width: 500px;
+            margin: auto;
+            padding: 50px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            margin-top: 120px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+            background-color: rgba(255, 255, 255, 0.9); /* Slight transparency */
+        }
+        .error { color: red; text-align: center; }
+        .success { color: green; text-align: center; }
+        label { display: block; margin: 10px 0 5px; }
+        input, select { width: 100%; padding: 8px; margin-bottom: 10px; }
+        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        .header {
+            padding: 35px;
+            color: white;
+            background-color: #012652;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo-container"><img src="{{ url_for('static', filename='logo.jpg') }}" alt="logo" width="100px" height="50px"></div>
+    </div>
+    <div class="form-container">
+        <form method="POST">
+            <label for="category">Loại thực phẩm:</label>
+            <select name="category" id="category" required>
+                {% for category in categories %}
+                <option value="{{ category }}">{{ category }}</option>
+                {% endfor %}
+            </select>
+            
+            <label for="date">Hạn sử dụng còn lại:</label>
+            <select name="date" id="date" required>
+                {% for date in dates %}
+                <option value="{{ date }}">{{ date }}</option>
+                {% endfor %}
+            </select>
+            
+            <label for="method">Điều kiện bảo quản:</label>
+            <select name="method" id="method" required>
+                {% for method in methods %}
+                <option value="{{ method }}">{{ method }}</option>
+                {% endfor %}
+            </select>
+            <label for="exp">Nhập hạn sử dụng:</label>
+            
+            <input type="text" name="exp" id="exp" placeholder="Hạn sử dụng cụ thể(nếu có)">
+
+            <label for="weight">Nhập trọng lượng:</label>
+            <input type="number" name="weight" id="weight" placeholder="grams">
+
+            <label for="quantity">Nhập số lượng:</label>
+            <input type="number" name="quantity" id="quantity" placeholder="Số lượng">
+            
+            <label for="address">Địa chỉ:</label>
+            <input type="text" name="address" id="address" placeholder="vd: 123 Đường Lê Lợi, Quận 1, Hồ Chí Minh" required>
+            
+            <label for="user_name">Họ và tên:</label>
+            <input type="text" name="user_name" id="user_name" placeholder="Họ và tên" required>
+            
+            <button type="submit">Xác nhận</button>
+        </form>
+        {% if error %}
+        <p class="error">{{ error }}</p>
+        {% endif %}
+        {% if success %}
+        <p class="success">{{ success }}</p>
+        {% endif %}
+        <p style="text-align: center;"><a href="/admin">Đến trang chủ</a></p>
+    </div>
+</body>
+</html>
